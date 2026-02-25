@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 
 export class MovingPlatform {
-    constructor(start, end, speed = 2, waitTime = 1) {
+    constructor(game, start, end, speed = 2, waitTime = 1) {
+        this.game = game; // store game reference to access physics materials
         this.start = start.clone();
         this.end = end.clone();
         this.speed = speed;
@@ -18,14 +19,15 @@ export class MovingPlatform {
         this.mesh = new THREE.Mesh(geometry, material);
         this.mesh.castShadow = true;
         this.mesh.receiveShadow = true;
-        this.updatePosition();
 
-        // Physics body (kinematic)
+        // Physics body (kinematic) - create BEFORE setting position
         const shape = new CANNON.Box(new CANNON.Vec3(1.5, 0.15, 1.5));
-        this.body = new CANNON.Body({ mass: 0, material: window.game.physics.platformMaterial });
+        this.body = new CANNON.Body({ mass: 0, material: game.physics.platformMaterial });
         this.body.addShape(shape);
-        this.body.position.copy(this.mesh.position);
         this.body.type = CANNON.Body.KINEMATIC;
+
+        // Now set initial position
+        this.updatePosition();
     }
 
     updatePosition() {
