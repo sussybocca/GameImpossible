@@ -3,9 +3,12 @@ import * as CANNON from 'cannon-es';
 
 export class MovingPlatform {
     constructor(game, start, end, speed = 2, waitTime = 1) {
-        this.game = game; // store game reference to access physics materials
-        this.start = start.clone();
-        this.end = end.clone();
+        this.game = game;
+
+        // Safely convert start and end to THREE.Vector3
+        this.start = this._toVector3(start);
+        this.end = this._toVector3(end);
+
         this.speed = speed;
         this.waitTime = waitTime;
         this.direction = 1;
@@ -20,14 +23,30 @@ export class MovingPlatform {
         this.mesh.castShadow = true;
         this.mesh.receiveShadow = true;
 
-        // Physics body (kinematic) - create BEFORE setting position
+        // Physics body (kinematic)
         const shape = new CANNON.Box(new CANNON.Vec3(1.5, 0.15, 1.5));
-        this.body = new CANNON.Body({ mass: 0, material: game.physics.platformMaterial });
+        // Ensure physics material exists, fallback to default if not
+        const physMaterial = game.physics?.platformMaterial || game.physics?.world?.defaultMaterial;
+        this.body = new CANNON.Body({ mass: 0, material: physMaterial });
         this.body.addShape(shape);
         this.body.type = CANNON.Body.KINEMATIC;
 
-        // Now set initial position
         this.updatePosition();
+    }
+
+    // Helper to convert any input to THREE.Vector3
+    _toVector3(obj) {
+        if (obj instanceof THREE.Vector3) {
+            return obj.clone();
+        }
+        if (typeof obj === 'object' && obj.x !== undefined && obj.y !== undefined && obj.z !== undefined) {
+            return new THREE.Vector3(obj.x, obj.y, obj.z);
+        }
+        if (Array.isArray(obj) && obj.length >= 3) {
+            return new THREE.Vector3(obj[0], obj[1], obj[2]);
+        }
+        console.warn('MovingPlatform: Invalid start/end, using zero vector', obj);
+        return new THREE.Vector3(0, 0, 0);
     }
 
     updatePosition() {
@@ -44,7 +63,10 @@ export class MovingPlatform {
             return;
         }
 
-        this.progress += this.direction * this.speed * deltaTime / this.start.distanceTo(this.end);
+        const distance = this.start.distanceTo(this.end);
+        if (distance === 0) return; // Prevent division by zero
+
+        this.progress += this.direction * this.speed * deltaTime / distance;
         if (this.progress >= 1) {
             this.progress = 1;
             this.direction = -1;
