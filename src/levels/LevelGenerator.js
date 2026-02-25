@@ -131,20 +131,25 @@ export class LevelGenerator {
         this.physics.addBody(portal2.body);
         level.mechanics.push(portal1, portal2);
 
-        // Add a moving platform
-        const platform = new MovingPlatform(
-            new THREE.Vector3(-5, 2, 0),
-            new THREE.Vector3(5, 2, 0),
-            1.5,
-            2
-        );
+       // Moving platform
+const platform = new MovingPlatform(
+    this.game,
+    new THREE.Vector3(-5, 2, 0),
+    new THREE.Vector3(5, 2, 0),
+    1.5, 2
+);
         level.movingPlatforms.push(platform);
         this.scene.add(platform.mesh);
         this.physics.addBody(platform.body);
         level.mechanics.push(platform);
 
-        // Add a laser
-        const laser = new Laser(new THREE.Vector3(0, 3, -15), new THREE.Vector3(0, 0, 1), 20, 0xff0000, 15);
+        /// Laser
+const laser = new Laser(
+    this.game,
+    new THREE.Vector3(0, 3, -15),
+    new THREE.Vector3(0, 0, 1),
+    20, 0xff0000, 15
+);
         laser.segments.forEach(s => this.scene.add(s));
         level.lasers.push(laser);
         level.mechanics.push(laser);
