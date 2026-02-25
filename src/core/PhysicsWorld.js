@@ -10,7 +10,6 @@ export class PhysicsWorld {
         this.world.defaultContactMaterial.friction = 0.5;
         this.world.allowSleep = true;
 
-        // Collision groups
         this.groups = CollisionGroups;
 
         // Materials
@@ -30,12 +29,16 @@ export class PhysicsWorld {
             restitution: 0.3,
             contactEquationStiffness: 1e7
         });
+        const playerPlatform = new CANNON.ContactMaterial(this.playerMaterial, this.platformMaterial, {
+            friction: 0.8,
+            restitution: 0.1
+        });
         this.world.addContactMaterial(playerWall);
         this.world.addContactMaterial(playerEnemy);
+        this.world.addContactMaterial(playerPlatform);
     }
 
     init() {
-        // Add a large ground plane (invisible but for physics)
         const groundShape = new CANNON.Plane();
         const groundBody = new CANNON.Body({ mass: 0, material: this.wallMaterial });
         groundBody.addShape(groundShape);
@@ -58,7 +61,8 @@ export class PhysicsWorld {
 
     raycast(from, to, options = {}) {
         const result = new CANNON.RaycastResult();
-        this.world.raycast(from, to, options, result);
+        // Use raycastClosest instead of raycast
+        this.world.raycastClosest(from, to, options, result);
         return result;
     }
 
