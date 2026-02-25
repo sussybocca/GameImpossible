@@ -23,6 +23,11 @@ export class Player {
         this.height = 2;
         this.airControl = 0.3;
         this.gravity = 9.82;
+        
+        // Smoothing
+        this.acceleration = 15;
+        this.deceleration = 20;
+        this.velocity = new THREE.Vector3();
 
         // Wall running
         this.canWallrun = true;
@@ -51,16 +56,14 @@ export class Player {
         this.mesh = this.assets.models.player.clone();
         this.scene.add(this.mesh);
 
-        // Physics body (capsule approximated by cylinder)
         const shape = new CANNON.Cylinder(this.radius, this.radius, this.height, 8);
         this.body = new CANNON.Body({ mass: 70, material: this.physics.playerMaterial });
         this.body.addShape(shape);
         this.body.position.set(0, 2, 0);
-        this.body.linearDamping = 0.8;
+        this.body.linearDamping = 0.9; // High damping for smooth stops
         this.body.fixedRotation = true;
         this.physics.addBody(this.body);
 
-        // Camera offset
         this.cameraOffset = new THREE.Vector3(0, 1.6, 0);
 
         // Input bindings
@@ -74,49 +77,55 @@ export class Player {
     }
 
     update(deltaTime) {
-        // Handle movement
+        // Get input direction
         const move = new THREE.Vector3();
         if (this.input.isKeyPressed('KeyW')) move.z -= 1;
         if (this.input.isKeyPressed('KeyS')) move.z += 1;
         if (this.input.isKeyPressed('KeyA')) move.x -= 1;
         if (this.input.isKeyPressed('KeyD')) move.x += 1;
 
-        // Sprint
-        const speed = this.input.isKeyPressed('ShiftLeft') ? this.runSpeed : this.walkSpeed;
+        const isMoving = move.lengthSq() > 0;
+        const targetSpeed = this.input.isKeyPressed('ShiftLeft') ? this.runSpeed : this.walkSpeed;
 
-        if (move.lengthSq() > 0) {
+        // Camera-relative direction
+        const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
+        const right = new THREE.Vector3(1, 0, 0).applyQuaternion(this.camera.quaternion);
+        forward.y = 0;
+        forward.normalize();
+        right.y = 0;
+        right.normalize();
+
+        let targetVel = new THREE.Vector3();
+        if (isMoving) {
             move.normalize();
-            // Camera-relative movement
-            const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
-            const right = new THREE.Vector3(1, 0, 0).applyQuaternion(this.camera.quaternion);
-            forward.y = 0;
-            forward.normalize();
-            right.y = 0;
-            right.normalize();
-
-            const moveWorld = new THREE.Vector3()
+            targetVel = new THREE.Vector3()
                 .addScaledVector(right, move.x)
-                .addScaledVector(forward, move.z);
-            moveWorld.normalize();
+                .addScaledVector(forward, move.z)
+                .normalize()
+                .multiplyScalar(targetSpeed);
+        }
 
-            // Apply velocity
-            const vel = this.body.velocity;
-            const targetVelX = moveWorld.x * speed;
-            const targetVelZ = moveWorld.z * speed;
-            vel.x = targetVelX;
-            vel.z = targetVelZ;
+        // Smooth acceleration / deceleration
+        const currentVel = this.body.velocity;
+        const currentHoriz = new THREE.Vector3(currentVel.x, 0, currentVel.z);
+        const targetHoriz = targetVel.clone().setY(0);
+
+        if (isMoving) {
+            // Accelerate towards target
+            const newHoriz = currentHoriz.lerp(targetHoriz, this.acceleration * deltaTime);
+            currentVel.x = newHoriz.x;
+            currentVel.z = newHoriz.z;
         } else {
-            // Dampen
-            this.body.velocity.x *= 0.9;
-            this.body.velocity.z *= 0.9;
+            // Decelerate
+            const newHoriz = currentHoriz.lerp(new THREE.Vector3(0,0,0), this.deceleration * deltaTime);
+            currentVel.x = newHoriz.x;
+            currentVel.z = newHoriz.z;
         }
 
         // Mouse look
         const mouseDelta = this.input.getMouseDelta();
         if (mouseDelta.x !== 0 || mouseDelta.y !== 0) {
-            // Yaw (rotate body)
             this.body.quaternion.y += mouseDelta.x * 0.002;
-            // Pitch (camera)
             this.camera.rotation.x -= mouseDelta.y * 0.002;
             this.camera.rotation.x = Math.max(-Math.PI/2.2, Math.min(Math.PI/2.2, this.camera.rotation.x));
         }
@@ -128,11 +137,11 @@ export class Player {
         // Camera follow
         this.camera.position.copy(this.body.position).add(this.cameraOffset);
 
-        // Wall running check
+        // Wall running
         this.checkWallRun();
 
         // Footsteps
-        if (move.lengthSq() > 0 && this.isOnGround()) {
+        if (isMoving && this.isOnGround()) {
             this.footstepTimer -= deltaTime;
             if (this.footstepTimer <= 0) {
                 this.assets.playSound('step', 0.3);
@@ -149,10 +158,8 @@ export class Player {
             this.game.currentLevel.gravityFields.forEach(f => f.applyToBody(this.body));
         }
 
-        // Time control update
         this.timeControl.update(deltaTime);
 
-        // Wallrun cooldown
         if (this.wallrunCooldown > 0) this.wallrunCooldown -= deltaTime;
     }
 
@@ -167,7 +174,6 @@ export class Player {
         if (this.isOnGround()) {
             this.body.velocity.y = this.jumpForce;
         } else if (this.canWallrun && this.wallrunTimer > 0) {
-            // Wall jump
             const jumpDir = this.wallNormal.clone().add(new THREE.Vector3(0, 1, 0)).normalize();
             this.body.velocity.set(jumpDir.x * 5, 5, jumpDir.z * 5);
             this.wallrunTimer = 0;
@@ -179,7 +185,6 @@ export class Player {
     checkWallRun() {
         if (!this.canWallrun || this.wallrunCooldown > 0 || this.isOnGround()) return;
 
-        // Raycast left and right for walls
         const pos = this.body.position;
         const right = new THREE.Vector3(1, 0, 0).applyQuaternion(this.body.quaternion);
         const left = right.clone().negate();
@@ -197,43 +202,31 @@ export class Player {
         };
 
         if (checkDir(right) || checkDir(left)) {
-            // Cancel gravity while wallrunning
-            this.body.velocity.y = 0; // or a slight downward force?
+            this.body.velocity.y = 0;
         } else {
             this.wallrunTimer = 0;
         }
     }
 
     interact() {
-        if (this.nearInteractable) {
-            this.nearInteractable.onInteract(this);
-        }
+        if (this.nearInteractable) this.nearInteractable.onInteract(this);
     }
 
     toggleGravityManip() {
         if (this.gravityManip.active) {
             this.gravityManip.deactivate();
         } else {
-            // Set direction based on camera look
             const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
             this.gravityManip.activate(dir);
         }
     }
 
-    startSprint() {
-        // Could play sound or animate
-    }
-
+    startSprint() {}
     stopSprint() {}
-
-    toggleCrouch() {
-        // Not implemented
-    }
+    toggleCrouch() {}
 
     takeDamage(amount) {
         this.health -= amount;
-        if (this.health <= 0) {
-            this.game.gameOver();
-        }
+        if (this.health <= 0) this.game.gameOver();
     }
 }
