@@ -46,6 +46,9 @@ export class PostProcessor {
         this.composer.addPass(glitchPass);
         this.passes.glitch = glitchPass;
         glitchPass.enabled = false;
+
+        // Ensure the last pass renders to screen
+        this.passes.afterimage.renderToScreen = true;
     }
 
     render(deltaTime) {
