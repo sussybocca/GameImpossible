@@ -1,3 +1,4 @@
+import * as THREE from 'three';   // <-- Add this line
 export class Engine {
     constructor() {
         this.clock = new THREE.Clock();
